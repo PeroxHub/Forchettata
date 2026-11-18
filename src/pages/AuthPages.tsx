@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Eye, KeyRound, Mail } from 'lucide-react'
 import { BrandMark, GoogleIcon, Notice, useToast } from '../components/ui'
 import { errorMessage, type Backend } from '../lib/backend'
@@ -24,8 +24,26 @@ function HowItWorks() {
   )
 }
 
-export function LoginPage({ backend, invited, onDemo }: { backend: Backend; invited: boolean; onDemo: () => void }) {
+export function LoginPage({
+  backend,
+  invited,
+  error,
+  onDemo,
+}: {
+  backend: Backend
+  invited: boolean
+  error?: string | null
+  onDemo: () => void
+}) {
   const toast = useToast()
+  const [problem, setProblem] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    backend.diagnose?.().then((p) => alive && setProblem(p))
+    return () => {
+      alive = false
+    }
+  }, [backend])
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [code, setCode] = useState('')
@@ -47,6 +65,16 @@ export function LoginPage({ backend, invited, onDemo }: { backend: Backend; invi
       <div className="auth-card stack-lg">
         <Hero subtitle="Il gioco delle cene a sorpresa tra amici." />
         <div className="card stack-lg">
+          {problem && (
+            <Notice tone="bad">
+              <b>Configurazione da sistemare.</b> {problem}
+            </Notice>
+          )}
+          {error && (
+            <Notice tone="bad">
+              <b>Accesso non riuscito.</b> {error}
+            </Notice>
+          )}
           {invited && <Notice tone="accent">Sei stato invitato in un gruppo: accedi per entrare.</Notice>}
           <button className="btn big block" disabled={busy} onClick={() => go(() => backend.signInWithGoogle())}>
             <GoogleIcon /> Accedi con Google
@@ -187,16 +215,31 @@ export function JoinPage({
   )
 }
 
-export function SetupMissing({ onDemo }: { onDemo: () => void }) {
+export function SetupMissing({ onDemo, problem }: { onDemo: () => void; problem?: string }) {
   return (
     <div className="center-page">
       <div className="auth-card stack-lg">
-        <Hero subtitle="L’app è pubblicata, ma non è ancora collegata al database." />
+        <Hero
+          subtitle={
+            problem
+              ? 'L’app è pubblicata, ma la configurazione ha un errore.'
+              : 'L’app è pubblicata, ma non è ancora collegata al database.'
+          }
+        />
         <div className="card stack">
-          <p>
-            Chi gestisce l’app deve creare il progetto Supabase e inserire su GitHub le variabili <code>SUPABASE_URL</code> e{' '}
-            <code>SUPABASE_KEY</code>. I passaggi sono nel file README del repository.
-          </p>
+          {problem ? (
+            <Notice tone="bad">{problem}</Notice>
+          ) : (
+            <p>
+              Chi gestisce l’app deve creare il progetto Supabase e inserire su GitHub le variabili <code>SUPABASE_URL</code> e{' '}
+              <code>SUPABASE_KEY</code>. I passaggi sono nel file README del repository.
+            </p>
+          )}
+          {problem && (
+            <p className="small muted">
+              Dopo aver corretto la variabile su GitHub, l’app va ripubblicata (Actions → Test e pubblicazione → Run workflow).
+            </p>
+          )}
           <button className="btn primary" onClick={onDemo}>
             <Eye size={18} /> Intanto guarda l’anteprima
           </button>

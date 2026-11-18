@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Game } from './game/Game'
 import { JoinPage, LoginPage, SetupMissing } from './pages/AuthPages'
 import { Spinner, ToastProvider, useToast } from './components/ui'
-import { errorMessage } from './lib/backend'
+import { errorMessage, explainAuthError } from './lib/backend'
 import { createSupabaseBackend } from './lib/supabaseBackend'
 import { buildScenario, DEMO_PLAYERS, SCENARIOS, type ScenarioId } from './lib/demoScenarios'
 import { todayInRome } from './lib/dates'
@@ -53,12 +53,36 @@ function goDemo(scenario: ScenarioId = 'proposte') {
   window.location.href = `${window.location.pathname}?anteprima=${scenario}`
 }
 
+/** Errori di configurazione evidenti, da segnalare prima ancora di provare. */
+function configProblem(url: string, key: string): string | null {
+  let host = ''
+  try {
+    host = new URL(url).host
+  } catch {
+    return `La variabile SUPABASE_URL (“${url}”) non è un indirizzo valido: deve essere tipo https://abcd.supabase.co`
+  }
+  if (host.endsWith('.supabase.com'))
+    return `La variabile SUPABASE_URL finisce con “.supabase.com”: deve finire con “.supabase.co” (senza la m).`
+  let role = ''
+  try {
+    role = JSON.parse(atob(key.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).role ?? ''
+  } catch {
+    /* non è un JWT: chiave nuova */
+  }
+  if (key.startsWith('sb_secret_') || role === 'service_role')
+    return 'In SUPABASE_KEY c’è la chiave SEGRETA di Supabase, che non deve mai stare nel sito. Sostituiscila con la Publishable key e rigenera subito quella segreta in Supabase (Project Settings → API Keys).'
+  return null
+}
+
 export default function App() {
   const demo = new URLSearchParams(window.location.search).has('anteprima')
+  const problem = SUPABASE_URL && SUPABASE_KEY ? configProblem(SUPABASE_URL, SUPABASE_KEY) : null
   return (
     <ToastProvider>
       {demo ? (
         <DemoApp />
+      ) : problem ? (
+        <SetupMissing onDemo={() => goDemo()} problem={problem} />
       ) : SUPABASE_URL && SUPABASE_KEY ? (
         <LiveApp url={SUPABASE_URL} keyValue={SUPABASE_KEY} />
       ) : (
@@ -82,6 +106,7 @@ function LiveApp({ url, keyValue }: { url: string; keyValue: string }) {
   const [groups, setGroups] = useState<GroupSummary[] | null>(null)
   const [groupId, setGroupId] = useState<string | null>(null)
   const [joinError, setJoinError] = useState<string | null>(null)
+  const [authError, setAuthError] = useState<string | null>(() => new URLSearchParams(window.location.search).get('error_description'))
   const [invite] = useState(() => {
     const code = new URLSearchParams(window.location.search).get('invito')
     if (code) store.set('cac_invite', code)
@@ -89,13 +114,12 @@ function LiveApp({ url, keyValue }: { url: string; keyValue: string }) {
   })
 
   useEffect(() => {
-    const p = new URLSearchParams(window.location.search)
-    const oauthError = p.get('error_description')
-    if (oauthError) toast(`Accesso non riuscito: ${oauthError}`, 'error')
     stripParams(['invito', 'error', 'error_code', 'error_description'])
     let alive = true
     backend.getUser().then((u) => {
       if (!alive) return
+      const e = backend.takeAuthError?.()
+      if (e && !u) setAuthError(e)
       setUser(u)
       stripParams(['code'])
     })
@@ -148,7 +172,8 @@ function LiveApp({ url, keyValue }: { url: string; keyValue: string }) {
   }
 
   if (user === undefined) return <Spinner />
-  if (user === null) return <LoginPage backend={backend} invited={!!invite} onDemo={() => goDemo()} />
+  if (user === null)
+    return <LoginPage backend={backend} invited={!!invite} error={authError ? explainAuthError(authError) : null} onDemo={() => goDemo()} />
   if (groups === null) return <Spinner label="Entro nel gruppo…" />
   if (!groupId)
     return (

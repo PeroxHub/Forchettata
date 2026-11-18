@@ -24,12 +24,42 @@ export function createSupabaseBackend(url: string, key: string): Backend {
     return data as T
   }
 
+  let authError: string | null = null
+
   return {
     kind: 'live',
 
     async getUser() {
+      const hadCode = new URLSearchParams(window.location.search).has('code')
+      const init = await sb.auth.initialize()
       const { data } = await sb.auth.getSession()
+      if (init.error) authError = init.error.message
+      else if (hadCode && !data.session)
+        authError =
+          'Il ritorno da Google non ha prodotto una sessione. Riprova dallo stesso browser (non da un’app o una finestra diversa); se si ripete, controlla in Supabase Site URL e Redirect URLs.'
+      if (authError) console.error('[cena] accesso non riuscito:', authError)
       return toUser(data.session?.user)
+    },
+    takeAuthError() {
+      const e = authError
+      authError = null
+      return e
+    },
+    async diagnose() {
+      try {
+        const r = await fetch(`${url.replace(/\/$/, '')}/auth/v1/settings`, { headers: { apikey: key } })
+        if (r.status === 401 || r.status === 403) {
+          const body = await r.text()
+          return `Supabase rifiuta la chiave SUPABASE_KEY impostata su GitHub (${r.status}: ${body.slice(0, 120)}). Deve essere la Publishable key (sb_publishable_…) o la anon public.`
+        }
+        if (!r.ok) return `Supabase risponde con un errore (${r.status}). Il progetto potrebbe essere in pausa: controlla su supabase.com.`
+        const settings = (await r.json()) as { external?: Record<string, boolean> }
+        if (settings.external && !settings.external.google)
+          return 'In Supabase l’accesso con Google non risulta attivo: Authentication → Sign In / Providers → Google.'
+        return null
+      } catch {
+        return `Non riesco a raggiungere Supabase all’indirizzo ${url}. Controlla la variabile SUPABASE_URL (deve essere tipo https://abcd.supabase.co) o la connessione.`
+      }
     },
     onAuthChange(cb) {
       const { data } = sb.auth.onAuthStateChange((_event, session) => cb(toUser(session?.user)))

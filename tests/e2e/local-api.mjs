@@ -69,6 +69,12 @@ const server = http.createServer(async (req, res) => {
     })
   }
   if (url.pathname === '/auth/v1/logout') return send(res, 204)
+  if (url.pathname === '/auth/v1/settings') {
+    if (req.headers.apikey === 'chiave-sbagliata') return send(res, 401, { message: 'Invalid API key' })
+    return send(res, 200, { external: { google: true, email: true } })
+  }
+  if (url.pathname === '/auth/v1/token')
+    return send(res, 400, { error: 'invalid_request', error_description: 'invalid flow state, no valid flow state found' })
 
   const m = url.pathname.match(/^\/rest\/v1\/rpc\/([a-z_]+)$/)
   if (m && req.method === 'POST') {
