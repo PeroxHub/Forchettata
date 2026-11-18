@@ -9,8 +9,10 @@ import { todayInRome } from './lib/dates'
 import type { DemoBackend } from './lib/demoBackend'
 import type { AuthUser, GroupSummary } from './lib/types'
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY as string | undefined
+// tolgo spazi, a capo e la barra finale incollati per sbaglio nelle variabili di GitHub
+const clean = (v: string | undefined) => v?.replace(/\s+/g, '').replace(/^["'“”]+|["'“”]+$/g, '') || undefined
+const SUPABASE_URL = clean(import.meta.env.VITE_SUPABASE_URL)?.replace(/\/+$/, '')
+const SUPABASE_KEY = clean(import.meta.env.VITE_SUPABASE_KEY)
 
 /* piccola memoria locale, che può anche non esserci (navigazione privata) */
 const store = {
