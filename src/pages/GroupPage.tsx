@@ -1,0 +1,193 @@
+import { useState } from 'react'
+import { Activity, Copy, LogOut, RefreshCw, Share2, UserCog, UserMinus, Users } from 'lucide-react'
+import { useGame } from '../game/context'
+import { ActivityList } from '../components/ActivityList'
+import { Avatar, Card, useToast } from '../components/ui'
+
+export function inviteLink(code: string) {
+  return `${window.location.origin}${window.location.pathname}?invito=${encodeURIComponent(code)}`
+}
+
+export function GroupPage({ onSignOut, email }: { onSignOut?: () => void; email?: string | null }) {
+  const { state, isAdmin, backend, run, ask } = useGame()
+  const toast = useToast()
+  const [myName, setMyName] = useState(state.me.display_name)
+  const active = state.members.filter((m) => m.active)
+  const former = state.members.filter((m) => !m.active)
+  const admins = active.filter((m) => m.role === 'admin').length
+  const link = state.invite_code ? inviteLink(state.invite_code) : null
+
+  const copy = async () => {
+    if (!link) return
+    try {
+      await navigator.clipboard.writeText(link)
+      toast('Link copiato')
+    } catch {
+      toast('Non riesco a copiare: tieni premuto sul link per copiarlo', 'error')
+    }
+  }
+  const share = async () => {
+    if (!link) return
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: state.group.name,
+          text: `Entra in “${state.group.name}”: proponiamo i posti in busta chiusa e poi li votiamo.`,
+          url: link,
+        })
+      } catch {
+        /* annullato */
+      }
+    } else void copy()
+  }
+
+  return (
+    <div className="stack-lg">
+      <div className="stack" style={{ gap: 4 }}>
+        <h1>{state.group.name}</h1>
+        <p className="muted">
+          {active.length} {active.length === 1 ? 'giocatore' : 'giocatori'} · {admins === 1 ? '1 organizzatore' : `${admins} organizzatori`}
+        </p>
+      </div>
+
+      {isAdmin && link && (
+        <Card icon={<Share2 size={20} />} title="Invita gli amici" sub="Chi apre questo link e accede entra nel gruppo.">
+          <div className="stack">
+            <div className="notice" style={{ wordBreak: 'break-all', fontFamily: 'ui-monospace, monospace', fontSize: '0.85rem' }}>
+              {link}
+            </div>
+            <div className="row">
+              <button className="btn primary" onClick={share}>
+                <Share2 size={18} /> Condividi
+              </button>
+              <button className="btn" onClick={copy}>
+                <Copy size={18} /> Copia
+              </button>
+              <button
+                className="btn ghost"
+                onClick={async () => {
+                  if (
+                    await ask(
+                      'Creare un nuovo link?',
+                      'Il link attuale smette di funzionare. Chi è già nel gruppo resta dentro.',
+                      'Crea nuovo link',
+                    )
+                  )
+                    await run(() => backend.regenerateInvite(state.group.id), 'Nuovo link creato')
+                }}
+              >
+                <RefreshCw size={16} /> Nuovo link
+              </button>
+            </div>
+            <p className="small muted">
+              Codice: <b>{state.invite_code}</b>
+            </p>
+          </div>
+        </Card>
+      )}
+
+      <Card icon={<Users size={20} />} title="Giocatori">
+        <div className="list">
+          {active.map((m) => {
+            const me = m.user_id === state.me.user_id
+            return (
+              <div key={m.user_id} className="list-item">
+                <Avatar name={m.display_name} url={m.avatar_url} />
+                <div className="grow">
+                  <b>{m.display_name}</b>
+                  {me && <span className="muted"> (tu)</span>}
+                </div>
+                {m.role === 'admin' && <span className="badge accent">organizzatore</span>}
+                {isAdmin && !me && (
+                  <div className="row" style={{ gap: 2 }}>
+                    <button
+                      className="btn ghost small"
+                      title={m.role === 'admin' ? 'Togli il ruolo di organizzatore' : 'Nomina organizzatore'}
+                      aria-label={
+                        m.role === 'admin'
+                          ? `Togli a ${m.display_name} il ruolo di organizzatore`
+                          : `Nomina ${m.display_name} organizzatore`
+                      }
+                      onClick={() =>
+                        run(
+                          () => backend.setMemberRole(state.group.id, m.user_id, m.role === 'admin' ? 'player' : 'admin'),
+                          m.role === 'admin' ? `${m.display_name} non è più organizzatore` : `${m.display_name} ora è organizzatore`,
+                        )
+                      }
+                    >
+                      <UserCog size={17} />
+                    </button>
+                    <button
+                      className="btn ghost small danger"
+                      aria-label={`Togli ${m.display_name} dal gruppo`}
+                      onClick={async () => {
+                        if (
+                          await ask(
+                            `Togliere ${m.display_name}?`,
+                            'Non potrà più vedere né giocare. Lo storico resta. Potrà rientrare solo con il link d’invito.',
+                            'Togli dal gruppo',
+                            true,
+                          )
+                        )
+                          await run(() => backend.removeMember(state.group.id, m.user_id), `${m.display_name} non fa più parte del gruppo`)
+                      }}
+                    >
+                      <UserMinus size={17} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        {former.length > 0 && (
+          <p className="small muted" style={{ marginTop: 8 }}>
+            Usciti: {former.map((m) => m.display_name).join(', ')}
+          </p>
+        )}
+        {isAdmin && (
+          <p className="small muted" style={{ marginTop: 8 }}>
+            Gli organizzatori sorteggiano, fissano la data, chiudono il voto e cambiano le regole. Giocano come tutti.
+          </p>
+        )}
+      </Card>
+
+      <Card title="Il tuo nome nel gruppo">
+        <form
+          className="row"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void run(() => backend.updateProfile(state.group.id, myName), 'Nome aggiornato')
+          }}
+        >
+          <input
+            className="input grow"
+            value={myName}
+            maxLength={40}
+            onChange={(e) => setMyName(e.target.value)}
+            aria-label="Il tuo nome"
+          />
+          <button className="btn" type="submit" disabled={!myName.trim() || myName.trim() === state.me.display_name}>
+            Salva
+          </button>
+        </form>
+        {onSignOut && (
+          <div className="row-between" style={{ marginTop: 14 }}>
+            <span className="small muted">{email ? `Accesso come ${email}` : ''}</span>
+            <button className="btn ghost small" onClick={onSignOut}>
+              <LogOut size={16} /> Esci
+            </button>
+          </div>
+        )}
+      </Card>
+
+      <Card
+        icon={<Activity size={20} />}
+        title="Attività"
+        sub="Sorteggi, date, verdetti e modifiche. Le proposte e i voti non compaiono mai."
+      >
+        <ActivityList limit={60} />
+      </Card>
+    </div>
+  )
+}
