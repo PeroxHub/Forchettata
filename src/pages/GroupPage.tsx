@@ -1,14 +1,137 @@
 import { useState } from 'react'
-import { Activity, Copy, LogOut, RefreshCw, Share2, UserCog, UserMinus, Users } from 'lucide-react'
+import { Activity, Copy, Layers, LogIn, LogOut, Plus, RefreshCw, Share2, UserCog, UserMinus, Users } from 'lucide-react'
 import { useGame } from '../game/context'
 import { ActivityList } from '../components/ActivityList'
 import { Avatar, Card, useToast } from '../components/ui'
+import { errorMessage } from '../lib/backend'
+import type { GroupSummary } from '../lib/types'
 
 export function inviteLink(code: string) {
   return `${window.location.origin}${window.location.pathname}?invito=${encodeURIComponent(code)}`
 }
 
-export function GroupPage({ onSignOut, email }: { onSignOut?: () => void; email?: string | null }) {
+/** Elenco dei propri gruppi, creazione di un gruppo nuovo e ingresso con un codice. */
+function MyGroups({
+  groups,
+  onSwitchGroup,
+  onGroupAdded,
+}: {
+  groups: GroupSummary[]
+  onSwitchGroup?: (id: string) => void
+  onGroupAdded: (id: string) => void
+}) {
+  const { backend, state } = useGame()
+  const toast = useToast()
+  const [name, setName] = useState('')
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const act = async (fn: () => Promise<string>, ok: string) => {
+    setBusy(true)
+    try {
+      const id = await fn()
+      toast(ok)
+      onGroupAdded(id)
+    } catch (e) {
+      toast(errorMessage(e), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Card
+      icon={<Layers size={20} />}
+      title="I tuoi gruppi"
+      sub="Puoi far parte di più gruppi, ognuno con le sue regole, i suoi giri e il suo storico."
+    >
+      <div className="stack-lg">
+        {groups.length > 1 && (
+          <div className="list">
+            {groups.map((g) => (
+              <div key={g.id} className="list-item">
+                <div className="grow">
+                  <b>{g.name}</b>
+                  {g.role === 'admin' && (
+                    <span className="badge accent" style={{ marginLeft: 8 }}>
+                      organizzatore
+                    </span>
+                  )}
+                </div>
+                {g.id === state.group.id ? (
+                  <span className="small muted">aperto ora</span>
+                ) : (
+                  <button className="btn small" onClick={() => onSwitchGroup?.(g.id)}>
+                    Apri
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <form
+          className="stack"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void act(async () => (await backend.createGroup(name)).id, 'Gruppo creato: ora sei l’organizzatore')
+          }}
+        >
+          <label className="field">
+            <span>Crea un gruppo nuovo</span>
+            <input
+              className="input"
+              value={name}
+              maxLength={60}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Es. Cene del giovedì"
+            />
+            <small>Ne diventi l’organizzatore: poi dalla scheda Gruppo prendi il link d’invito per i nuovi amici.</small>
+          </label>
+          <div>
+            <button className="btn" type="submit" disabled={busy || !name.trim()}>
+              <Plus size={18} /> Crea il gruppo
+            </button>
+          </div>
+        </form>
+        <form
+          className="stack"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void act(() => backend.joinGroup(code), 'Sei entrato nel gruppo')
+          }}
+        >
+          <label className="field">
+            <span>Entra in un altro gruppo</span>
+            <input
+              className="input"
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              placeholder="Codice d’invito"
+              autoCapitalize="characters"
+            />
+          </label>
+          <div>
+            <button className="btn" type="submit" disabled={busy || code.trim().length < 4}>
+              <LogIn size={18} /> Entra
+            </button>
+          </div>
+        </form>
+      </div>
+    </Card>
+  )
+}
+
+export function GroupPage({
+  onSignOut,
+  email,
+  groups,
+  onSwitchGroup,
+  onGroupAdded,
+}: {
+  onSignOut?: () => void
+  email?: string | null
+  groups?: GroupSummary[]
+  onSwitchGroup?: (id: string) => void
+  onGroupAdded?: (id: string) => void
+}) {
   const { state, isAdmin, backend, run, ask } = useGame()
   const toast = useToast()
   const [myName, setMyName] = useState(state.me.display_name)
@@ -151,6 +274,8 @@ export function GroupPage({ onSignOut, email }: { onSignOut?: () => void; email?
           </p>
         )}
       </Card>
+
+      {groups && onGroupAdded && <MyGroups groups={groups} onSwitchGroup={onSwitchGroup} onGroupAdded={onGroupAdded} />}
 
       <Card title="Il tuo nome nel gruppo">
         <form

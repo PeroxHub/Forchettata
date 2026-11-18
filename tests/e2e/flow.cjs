@@ -24,7 +24,7 @@ async function main() {
   await db.connect()
   const [{ code }] = (await db.query('select code from public.group_invites limit 1')).rows
   const users = {}
-  for (const name of ['Anna', 'Bruno', 'Carla']) {
+  for (const name of ['Anna', 'Bruno', 'Carla', 'Dario']) {
     const u = { id: randomUUID(), email: `${name.toLowerCase()}@example.com`, name }
     await db.query('insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, $3)', [
       u.id,
@@ -55,7 +55,7 @@ async function main() {
     })
     pages[name] = page
   }
-  const { Anna, Bruno, Carla } = pages
+  const { Anna, Bruno, Carla, Dario } = pages
   /** Aspetta un avviso che corrisponda al testo; se non arriva mostra quelli presenti. */
   const expectToast = async (p, re, msg) => {
     const t = p.locator('.toast').filter({ hasText: re }).first()
@@ -176,6 +176,32 @@ async function main() {
   await Carla.waitForSelector('text=I posti migliori')
   await shot(Carla, '4-classifica')
   step('storico e classifica')
+
+  // 10. Anna crea un secondo gruppo dalla scheda Gruppo e può passare dall'uno all'altro
+  await Anna.goto(`${APP}#gruppo`)
+  await Anna.waitForSelector('text=I tuoi gruppi')
+  await Anna.getByPlaceholder('Es. Cene del giovedì').fill('Cene del giovedì')
+  await Anna.getByRole('button', { name: 'Crea il gruppo' }).click()
+  await expectToast(Anna, 'Gruppo creato', 'gruppo creato')
+  await Anna.waitForSelector('select[aria-label="Gruppo"]')
+  const opts = await Anna.locator('select[aria-label="Gruppo"] option').allTextContents()
+  assert(opts.includes('Cene del giovedì') && opts.includes('Cena alla cieca'), `due gruppi nel menu (${opts})`)
+  assert((await Anna.locator('main h1').first().textContent()) === 'Cene del giovedì', 'aperto il gruppo nuovo')
+  await Anna.selectOption('select[aria-label="Gruppo"]', { label: 'Cena alla cieca' })
+  await Anna.waitForFunction(() => document.querySelector('main h1')?.textContent === 'Cena alla cieca')
+  step('Anna ha creato un secondo gruppo e passa dall’uno all’altro')
+
+  // 11. Dario arriva senza invito e crea il suo gruppo dalla pagina di ingresso
+  await Dario.goto(APP)
+  await Dario.waitForSelector('text=Oppure crea un gruppo nuovo')
+  await Dario.getByPlaceholder('Es. Cene del giovedì').fill('Amici di Dario')
+  await Dario.getByRole('button', { name: 'Crea il gruppo' }).click()
+  await Dario.waitForSelector('.hero', { timeout: 10000 })
+  assert((await Dario.locator('.hero h1').textContent()) === 'Giro 1', 'Dario al giro 1')
+  assert(await Dario.getByRole('button', { name: 'Sorteggia', exact: true }).count(), 'Dario organizzatore')
+  assert((await Dario.locator('.brand-name').textContent()) === 'Amici di Dario', 'nome del gruppo di Dario')
+  await shot(Dario, '5-nuovo-gruppo')
+  step('Dario ha creato il suo gruppo ed è organizzatore')
 
   await browser.close()
   await db.end()

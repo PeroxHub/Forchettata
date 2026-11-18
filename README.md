@@ -88,11 +88,7 @@ Se il link finisce in mani sbagliate: *Gruppo → Nuovo link* (quello vecchio sm
 
 - **Progetto in pausa.** Al momento il piano gratuito di Supabase mette in pausa i progetti inattivi da circa una settimana. Se l'app dice che non riesce a collegarsi, entra in Supabase e premi *Restore project*: i dati restano.
 - **Aggiornare il database.** Se lo schema cambia, basta rieseguire tutto `supabase/schema.sql` nello SQL Editor: aggiorna funzioni e regole di sicurezza senza toccare i dati.
-- **Più gruppi.** Il database supporta più gruppi, ma l'app per ora non ha un pulsante per crearne. Si crea dallo SQL Editor:
-  ```sql
-  with g as (insert into groups (name, settings) values ('Altro gruppo', private.validate_rules(private.default_rules())) returning id)
-  insert into group_invites (group_id, code) select id, private.random_code(8) from g returning code;
-  ```
+- **Più gruppi.** Chiunque abbia accesso può creare un gruppo nuovo (scheda **Gruppo → I tuoi gruppi → Crea un gruppo nuovo**, oppure dalla pagina di ingresso se non è ancora in nessun gruppo) e ne diventa l'organizzatore, con il suo link d'invito, le sue regole e il suo storico. Si passa da un gruppo all'altro dal menu in alto. Ogni persona può organizzare al massimo 10 gruppi.
 
 ---
 

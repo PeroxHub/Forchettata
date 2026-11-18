@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Eye, KeyRound, Mail } from 'lucide-react'
+import { Eye, KeyRound, Mail, Plus } from 'lucide-react'
 import { BrandMark, GoogleIcon, Notice, useToast } from '../components/ui'
 import { errorMessage, type Backend } from '../lib/backend'
 
@@ -166,11 +166,12 @@ export function JoinPage({
 }) {
   const toast = useToast()
   const [code, setCode] = useState(initialCode ?? '')
+  const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   return (
     <div className="center-page">
       <div className="auth-card stack-lg">
-        <Hero subtitle="Manca solo l’ingresso nel gruppo." />
+        <Hero subtitle="Entra nel gruppo dei tuoi amici, oppure creane uno." />
         <form
           className="card stack"
           onSubmit={async (e) => {
@@ -200,6 +201,38 @@ export function JoinPage({
           </label>
           <button className="btn primary block" type="submit" disabled={busy || code.trim().length < 4}>
             Entra nel gruppo
+          </button>
+        </form>
+        <form
+          className="card stack"
+          onSubmit={async (e) => {
+            e.preventDefault()
+            setBusy(true)
+            try {
+              const g = await backend.createGroup(name)
+              toast('Gruppo creato: ora sei l’organizzatore')
+              onJoined(g.id)
+            } catch (err) {
+              toast(errorMessage(err), 'error')
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          <label className="field">
+            <span>Oppure crea un gruppo nuovo</span>
+            <input
+              className="input"
+              value={name}
+              maxLength={60}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Es. Cene del giovedì"
+              required
+            />
+            <small>Ne diventi l’organizzatore e ricevi il link d’invito da mandare agli amici.</small>
+          </label>
+          <button className="btn block" type="submit" disabled={busy || !name.trim()}>
+            <Plus size={18} /> Crea il gruppo
           </button>
         </form>
         <div className="row" style={{ justifyContent: 'center' }}>

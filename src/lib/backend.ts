@@ -16,6 +16,8 @@ export interface Backend {
 
   myGroups(): Promise<GroupSummary[]>
   joinGroup(code: string): Promise<string>
+  /** Crea un gruppo nuovo di cui l'utente è organizzatore. */
+  createGroup(name: string): Promise<{ id: string; code: string }>
   getState(groupId: string): Promise<GameState>
   /** Avvisa quando cambia qualcosa nel gruppo. Restituisce la funzione per smettere. */
   subscribe(groupId: string, onChange: () => void): () => void

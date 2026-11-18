@@ -46,6 +46,7 @@ export function Game({
   groupId,
   groups,
   onSwitchGroup,
+  onGroupAdded,
   onSignOut,
   onLostAccess,
   email,
@@ -55,6 +56,8 @@ export function Game({
   groupId: string
   groups?: GroupSummary[]
   onSwitchGroup?: (id: string) => void
+  /** Dopo aver creato un gruppo o essere entrati in uno nuovo. */
+  onGroupAdded?: (id: string) => void
   onSignOut?: () => void
   onLostAccess?: () => void
   email?: string | null
@@ -104,7 +107,7 @@ export function Game({
     storico: <HistoryPage />,
     classifica: <LeaderboardPage />,
     regole: <RulesPage />,
-    gruppo: <GroupPage onSignOut={onSignOut} email={email} />,
+    gruppo: <GroupPage onSignOut={onSignOut} email={email} groups={groups} onSwitchGroup={onSwitchGroup} onGroupAdded={onGroupAdded} />,
   }[tab]
 
   return (

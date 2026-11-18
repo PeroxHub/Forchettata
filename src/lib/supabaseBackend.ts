@@ -86,6 +86,15 @@ export function createSupabaseBackend(url: string, key: string): Backend {
 
     myGroups: () => rpc<GroupSummary[]>('my_groups'),
     joinGroup: (code) => rpc<string>('join_group', { p_code: code }),
+    async createGroup(name) {
+      try {
+        return await rpc<{ id: string; code: string }>('create_group', { p_name: name })
+      } catch (e) {
+        if (/create_group|schema cache|could not find the function/i.test((e as Error).message))
+          throw new AppError('Il database va aggiornato: in Supabase riesegui il file supabase/schema.sql nello SQL Editor.')
+        throw e
+      }
+    },
     getState: (gid) => rpc<GameState>('get_state', { p_group: gid }),
     tick: (gid) => rpc<boolean>('tick', { p_group: gid }),
 

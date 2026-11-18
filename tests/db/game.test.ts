@@ -430,6 +430,28 @@ describe.skipIf(!DATABASE_URL)('database: regole del gioco', () => {
     expect((await db.state(g.users.Carla, g.gid)).me.display_name).toBe('Carlotta')
   })
 
+  it('creare un gruppo nuovo: chi lo crea è organizzatore, gli altri entrano col codice', async () => {
+    const zoe = await db.createUser('Zoe')
+    const res = await db.rpc(zoe, 'create_group', { p_name: '  Cene del giovedì ' })
+    expect(res.code).toMatch(/^[A-Z2-9]{8}$/)
+    const s = await db.state(zoe, res.id)
+    expect(s.group.name).toBe('Cene del giovedì')
+    expect(s.me.role).toBe('admin')
+    expect(s.rounds).toHaveLength(1)
+    expect(s.invite_code).toBe(res.code)
+    const ugo = await db.createUser('Ugo')
+    await db.rpc(ugo, 'join_group', { p_code: res.code })
+    expect((await db.state(ugo, res.id)).me.role).toBe('player')
+    // i gruppi sono separati
+    const g = await db.groupWith(['Anna'])
+    await expect(db.state(zoe, g.gid)).rejects.toThrow(/Non fai parte/)
+    expect((await db.rpc(zoe, 'my_groups')).map((x: any) => x.name)).toEqual(['Cene del giovedì'])
+    await expect(db.rpc(zoe, 'create_group', { p_name: '' })).rejects.toThrow(/da 1 a 60/)
+    await expect(db.rpc(null, 'create_group', { p_name: 'x' }, 'anon')).rejects.toThrow(/permission denied/)
+    for (let i = 0; i < 9; i++) await db.rpc(zoe, 'create_group', { p_name: `G${i}` })
+    await expect(db.rpc(zoe, 'create_group', { p_name: 'Troppi' })).rejects.toThrow(/massimo/)
+  })
+
   it('le funzioni interne non sono chiamabili dagli utenti', async () => {
     const g = await db.groupWith(['Anna'])
     const r = await db.currentRound(g.gid)

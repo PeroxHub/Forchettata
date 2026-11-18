@@ -196,6 +196,9 @@ export class DemoBackend implements Backend {
   async joinGroup() {
     return this.group.id
   }
+  async createGroup(): Promise<{ id: string; code: string }> {
+    throw new AppError('Nell’anteprima non si possono creare gruppi.')
+  }
   subscribe(_gid: string, onChange: () => void) {
     this.listeners.add(onChange)
     return () => {

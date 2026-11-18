@@ -626,6 +626,52 @@ begin
 end
 $$;
 
+-- Crea un gruppo nuovo: chi lo crea ne diventa organizzatore e si apre il giro 1.
+create or replace function public.create_group(p_name text)
+returns jsonb language plpgsql volatile security definer set search_path = '' as $$
+declare
+  uid uuid := auth.uid();
+  nm text := btrim(coalesce(p_name, ''));
+  gid uuid;
+  c text;
+  dn text;
+  av text;
+begin
+  if uid is null then
+    raise exception 'Devi prima accedere';
+  end if;
+  if char_length(nm) not between 1 and 60 then
+    raise exception 'Il nome del gruppo deve avere da 1 a 60 caratteri';
+  end if;
+  if (select count(*) from public.members m
+       where m.user_id = uid and m.role = 'admin' and m.active) >= 10 then
+    raise exception 'Organizzi già 10 gruppi: è il massimo';
+  end if;
+
+  insert into public.groups (name, settings)
+  values (nm, private.validate_rules(private.default_rules()))
+  returning id into gid;
+  loop
+    c := private.random_code(8);
+    exit when not exists (select 1 from public.group_invites where code = c);
+  end loop;
+  insert into public.group_invites (group_id, code) values (gid, c);
+
+  select left(coalesce(nullif(btrim(u.raw_user_meta_data->>'full_name'), ''),
+                       nullif(btrim(u.raw_user_meta_data->>'name'), ''),
+                       nullif(split_part(u.email, '@', 1), ''),
+                       'Giocatore'), 40),
+         u.raw_user_meta_data->>'avatar_url'
+    into dn, av
+    from auth.users u where u.id = uid;
+  insert into public.members (group_id, user_id, display_name, avatar_url, role)
+  values (gid, uid, coalesce(dn, 'Giocatore'), av, 'admin');
+  perform private.log(gid, 'joined', jsonb_build_object('first', true));
+  perform private.open_round(gid);
+  return jsonb_build_object('id', gid, 'code', c);
+end
+$$;
+
 -- Tutto quello che serve all'app per l'utente corrente, in una chiamata.
 create or replace function public.get_state(p_group uuid)
 returns jsonb language plpgsql stable security definer set search_path = '' as $$
@@ -1232,7 +1278,7 @@ revoke all on all functions in schema private from public, anon, authenticated;
 grant execute on function private.is_member(uuid), private.is_admin(uuid) to authenticated;
 
 revoke all on function
-  public.my_groups(), public.join_group(text), public.get_state(uuid),
+  public.my_groups(), public.join_group(text), public.create_group(text), public.get_state(uuid),
   public.save_proposal(uuid, text, text, uuid), public.delete_proposal(uuid),
   public.save_availability(uuid, date[]), public.draw_round(uuid),
   public.undo_draw(uuid, boolean), public.set_dinner_date(uuid, date),
@@ -1242,7 +1288,7 @@ revoke all on function
   public.remove_member(uuid, uuid), public.regenerate_invite(uuid)
   from public, anon;
 grant execute on function
-  public.my_groups(), public.join_group(text), public.get_state(uuid),
+  public.my_groups(), public.join_group(text), public.create_group(text), public.get_state(uuid),
   public.save_proposal(uuid, text, text, uuid), public.delete_proposal(uuid),
   public.save_availability(uuid, date[]), public.draw_round(uuid),
   public.undo_draw(uuid, boolean), public.set_dinner_date(uuid, date),

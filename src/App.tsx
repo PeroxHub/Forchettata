@@ -192,6 +192,7 @@ function LiveApp({ url, keyValue }: { url: string; keyValue: string }) {
         store.set('cac_group', id)
         setGroupId(id)
       }}
+      onGroupAdded={(id) => void loadGroups(id)}
       onSignOut={signOut}
       onLostAccess={() => {
         store.del('cac_group')
