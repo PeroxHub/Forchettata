@@ -203,6 +203,50 @@ async function main() {
   await shot(Dario, '5-nuovo-gruppo')
   step('Dario ha creato il suo gruppo ed è organizzatore')
 
+  // 12. Anna rinomina il gruppo: il menu in alto si aggiorna subito, e Bruno vede il nome nuovo
+  await Anna.goto(`${APP}#gruppo`)
+  await Anna.waitForSelector('text=Impostazioni del gruppo')
+  await Anna.getByLabel('Nome del gruppo').fill('Le Forchette')
+  await Anna.getByRole('button', { name: 'Rinomina' }).click()
+  await expectToast(Anna, 'Nome del gruppo aggiornato', 'nome aggiornato')
+  await Anna.waitForFunction(() => document.querySelector('main h1')?.textContent === 'Le Forchette')
+  await Anna.waitForFunction(
+    () => [...document.querySelectorAll('.brand select option')].some((o) => o.textContent === 'Le Forchette'),
+    null,
+    { timeout: 5000 },
+  )
+  assert((await Anna.title()).startsWith('Le Forchette'), 'titolo della pagina aggiornato')
+  await Bruno.goto(`${APP}#gruppo`)
+  await Bruno.reload()
+  await Bruno.waitForSelector('main h1')
+  assert((await Bruno.locator('.brand-name').textContent()) === 'Le Forchette', 'Bruno vede il nome nuovo')
+  assert(await Bruno.locator('text=ha rinominato il gruppo').count(), 'rinomina nel registro')
+  assert(!(await Bruno.locator('text=Impostazioni del gruppo').count()), 'Bruno non può rinominare')
+  step('gruppo rinominato: menu, titolo e registro aggiornati')
+
+  // 13. Anna elimina il secondo gruppo e torna all'altro
+  await Anna.selectOption('select[aria-label="Gruppo"]', { label: 'Cene del giovedì' })
+  await Anna.waitForFunction(() => document.querySelector('main h1')?.textContent === 'Cene del giovedì')
+  await Anna.getByRole('button', { name: 'Elimina…' }).click()
+  const del = Anna.getByRole('dialog').getByRole('button', { name: 'Elimina per sempre' })
+  assert(await del.isDisabled(), 'senza conferma non si elimina')
+  await Anna.getByLabel('Per confermare scrivi il nome del gruppo').fill('cene del giovedì')
+  await del.click()
+  await expectToast(Anna, 'eliminato', 'gruppo eliminato')
+  await Anna.waitForFunction(() => document.querySelector('.brand-name')?.textContent === 'Le Forchette', null, { timeout: 8000 })
+  assert(!(await Anna.locator('.brand select').count()), 'resta un solo gruppo')
+  const [{ n }] = (await db.query("select count(*)::int as n from public.groups where name = 'Cene del giovedì'")).rows
+  assert(n === 0, 'gruppo sparito dal database')
+  step('gruppo eliminato, Anna torna all’altro gruppo')
+
+  // 14. Dario elimina il suo unico gruppo e torna alla pagina di ingresso
+  await Dario.goto(`${APP}#gruppo`)
+  await Dario.getByRole('button', { name: 'Elimina…' }).click()
+  await Dario.getByLabel('Per confermare scrivi il nome del gruppo').fill('Amici di Dario')
+  await Dario.getByRole('dialog').getByRole('button', { name: 'Elimina per sempre' }).click()
+  await Dario.waitForSelector('text=Oppure crea un gruppo nuovo', { timeout: 8000 })
+  step('Dario ha eliminato il suo unico gruppo e torna alla pagina di ingresso')
+
   await browser.close()
   await db.end()
   if (errors.length) throw new Error('Errori nel browser:\n' + errors.join('\n'))

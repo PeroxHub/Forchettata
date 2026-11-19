@@ -20,7 +20,11 @@ export function createSupabaseBackend(url: string, key: string): Backend {
 
   async function rpc<T>(fn: string, args?: Record<string, unknown>): Promise<T> {
     const { data, error } = await sb.rpc(fn, args)
-    if (error) throw new AppError(error.message || 'Errore del server')
+    if (error) {
+      if (/could not find the function|schema cache/i.test(error.message))
+        throw new AppError('Il database va aggiornato: in Supabase riesegui il file supabase/schema.sql nello SQL Editor.')
+      throw new AppError(error.message || 'Errore del server')
+    }
     return data as T
   }
 
@@ -86,15 +90,7 @@ export function createSupabaseBackend(url: string, key: string): Backend {
 
     myGroups: () => rpc<GroupSummary[]>('my_groups'),
     joinGroup: (code) => rpc<string>('join_group', { p_code: code }),
-    async createGroup(name) {
-      try {
-        return await rpc<{ id: string; code: string }>('create_group', { p_name: name })
-      } catch (e) {
-        if (/create_group|schema cache|could not find the function/i.test((e as Error).message))
-          throw new AppError('Il database va aggiornato: in Supabase riesegui il file supabase/schema.sql nello SQL Editor.')
-        throw e
-      }
-    },
+    createGroup: (name) => rpc<{ id: string; code: string }>('create_group', { p_name: name }),
     getState: (gid) => rpc<GameState>('get_state', { p_group: gid }),
     tick: (gid) => rpc<boolean>('tick', { p_group: gid }),
 
@@ -136,6 +132,12 @@ export function createSupabaseBackend(url: string, key: string): Backend {
     castVote: (roundId, scores) => rpc('cast_vote', { p_round: roundId, p_scores: scores }),
     closeRound: (roundId) => rpc('close_round', { p_round: roundId }),
     updateSettings: (gid, name, rules) => rpc('update_settings', { p_group: gid, p_name: name, p_rules: rules }),
+    async renameGroup(gid, name) {
+      await rpc('rename_group', { p_group: gid, p_name: name })
+    },
+    async deleteGroup(gid, confirm) {
+      await rpc('delete_group', { p_group: gid, p_confirm: confirm })
+    },
     async updateProfile(gid, name) {
       await rpc('update_profile', { p_group: gid, p_name: name })
     },

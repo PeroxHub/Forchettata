@@ -167,10 +167,9 @@ function Check({ label, hint, checked, onChange }: { label: string; hint?: strin
 
 function RulesEditor({ onDone }: { onDone: () => void }) {
   const { state, cur, round, backend, run, busy, ask } = useGame()
-  const [name, setName] = useState(state.group.name)
   const [r, setR] = useState<Rules>(structuredClone(state.settings))
   const set = <K extends keyof Rules>(k: K, v: Rules[K]) => setR((x) => ({ ...x, [k]: v }))
-  const problem = checkRules(r) ?? (!name.trim() ? 'Il gruppo deve avere un nome.' : null)
+  const problem = checkRules(r)
 
   const setCrit = (i: number, patch: Partial<Rules['criteria'][number]>) =>
     set(
@@ -188,7 +187,7 @@ function RulesEditor({ onDone }: { onDone: () => void }) {
     if (problem) return
     const clean: Rules = { ...r, criteria: r.criteria.map((c) => ({ ...c, label: c.label.trim() })), prize: r.prize.trim() }
     const res = await run(
-      () => backend.updateSettings(state.group.id, name, clean),
+      () => backend.updateSettings(state.group.id, state.group.name, clean),
       (x) =>
         !x.changed
           ? 'Nessuna modifica'
@@ -207,13 +206,6 @@ function RulesEditor({ onDone }: { onDone: () => void }) {
           : 'Nel giro in corso nessuno ha ancora votato: le modifiche valgono subito.'}{' '}
         Ogni modifica viene scritta nel registro, visibile a tutti.
       </Notice>
-
-      <Section title="Gruppo">
-        <label className="field">
-          <span>Nome del gruppo</span>
-          <input className="input" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
-        </label>
-      </Section>
 
       <Section title="Verdetto e premio">
         <Num

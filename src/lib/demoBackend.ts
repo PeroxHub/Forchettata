@@ -450,6 +450,20 @@ export class DemoBackend implements Backend {
     return { changed: true, applied_to_current: applied }
   }
 
+  async renameGroup(_gid: string, name: string) {
+    this.requireAdmin()
+    const nm = name.trim()
+    if (!nm || nm.length > 60) fail('Il nome del gruppo deve avere da 1 a 60 caratteri')
+    if (nm === this.group.name) return
+    this.log('group_renamed', { from: this.group.name, to: nm })
+    this.group.name = nm
+    this.notify()
+  }
+
+  async deleteGroup(): Promise<void> {
+    fail('Nell’anteprima non si può eliminare il gruppo.')
+  }
+
   async updateProfile(_gid: string, name: string) {
     this.requireMember()
     const nm = name.trim()

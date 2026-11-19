@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { Activity, Copy, Layers, LogIn, LogOut, Plus, RefreshCw, Share2, UserCog, UserMinus, Users } from 'lucide-react'
+import { Activity, Copy, Layers, LogIn, LogOut, Plus, RefreshCw, Settings2, Share2, Trash2, UserCog, UserMinus, Users } from 'lucide-react'
 import { useGame } from '../game/context'
 import { ActivityList } from '../components/ActivityList'
-import { Avatar, Card, useToast } from '../components/ui'
+import { Avatar, Card, Modal, Notice, useToast } from '../components/ui'
 import { errorMessage } from '../lib/backend'
 import type { GroupSummary } from '../lib/types'
 
@@ -119,18 +119,112 @@ function MyGroups({
   )
 }
 
+/** Nome del gruppo ed eliminazione: solo per gli organizzatori. */
+function GroupSettings({ onGroupDeleted }: { onGroupDeleted?: () => void }) {
+  const { state, backend, run } = useGame()
+  const toast = useToast()
+  const [name, setName] = useState(state.group.name)
+  const [askDelete, setAskDelete] = useState(false)
+  const [confirm, setConfirm] = useState('')
+  const [busy, setBusy] = useState(false)
+  const matches = confirm.trim().toLowerCase() === state.group.name.trim().toLowerCase()
+
+  const remove = async () => {
+    setBusy(true)
+    try {
+      await backend.deleteGroup(state.group.id, confirm)
+      toast(`Gruppo “${state.group.name}” eliminato`)
+      setAskDelete(false)
+      onGroupDeleted?.()
+    } catch (e) {
+      toast(errorMessage(e), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card icon={<Settings2 size={20} />} title="Impostazioni del gruppo">
+      <div className="stack-lg">
+        <form
+          className="stack"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void run(() => backend.renameGroup(state.group.id, name), 'Nome del gruppo aggiornato')
+          }}
+        >
+          <label className="field">
+            <span>Nome del gruppo</span>
+            <div className="row" style={{ flexWrap: 'nowrap' }}>
+              <input className="input grow" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
+              <button className="btn" type="submit" disabled={!name.trim() || name.trim() === state.group.name}>
+                Rinomina
+              </button>
+            </div>
+          </label>
+        </form>
+        <div className="divider" />
+        <div className="row-between">
+          <div className="grow" style={{ minWidth: 200 }}>
+            <b>Elimina il gruppo</b>
+            <p className="small muted">Spariscono giri, proposte, voti, storico e registro, per tutti. Non si torna indietro.</p>
+          </div>
+          {onGroupDeleted && (
+            <button className="btn danger" onClick={() => (setConfirm(''), setAskDelete(true))}>
+              <Trash2 size={17} /> Elimina…
+            </button>
+          )}
+        </div>
+      </div>
+      {askDelete && (
+        <Modal
+          title="Eliminare il gruppo?"
+          onClose={() => setAskDelete(false)}
+          actions={
+            <>
+              <button className="btn ghost" onClick={() => setAskDelete(false)}>
+                Annulla
+              </button>
+              <button className="btn primary danger" disabled={!matches || busy} onClick={remove}>
+                <Trash2 size={17} /> Elimina per sempre
+              </button>
+            </>
+          }
+        >
+          <Notice tone="bad">
+            Elimini <b>{state.group.name}</b> per tutti i {state.members.filter((m) => m.active).length} giocatori, con tutti i giri, le
+            proposte, i voti e lo storico. Non si può annullare.
+          </Notice>
+          <label className="field">
+            <span>Per confermare scrivi il nome del gruppo</span>
+            <input
+              className="input"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              placeholder={state.group.name}
+              autoFocus
+            />
+          </label>
+        </Modal>
+      )}
+    </Card>
+  )
+}
+
 export function GroupPage({
   onSignOut,
   email,
   groups,
   onSwitchGroup,
   onGroupAdded,
+  onGroupDeleted,
 }: {
   onSignOut?: () => void
   email?: string | null
   groups?: GroupSummary[]
   onSwitchGroup?: (id: string) => void
   onGroupAdded?: (id: string) => void
+  onGroupDeleted?: () => void
 }) {
   const { state, isAdmin, backend, run, ask } = useGame()
   const toast = useToast()
@@ -276,6 +370,8 @@ export function GroupPage({
       </Card>
 
       {groups && onGroupAdded && <MyGroups groups={groups} onSwitchGroup={onSwitchGroup} onGroupAdded={onGroupAdded} />}
+
+      {isAdmin && <GroupSettings onGroupDeleted={onGroupDeleted} />}
 
       <Card title="Il tuo nome nel gruppo">
         <form

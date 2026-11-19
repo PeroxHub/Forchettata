@@ -34,6 +34,9 @@ export interface Backend {
   closeRound(roundId: string): Promise<{ outcome: string; mean: number }>
   updateSettings(groupId: string, name: string, rules: Rules): Promise<{ changed: boolean; applied_to_current: boolean }>
   updateProfile(groupId: string, name: string): Promise<void>
+  renameGroup(groupId: string, name: string): Promise<void>
+  /** Elimina il gruppo e tutti i suoi dati; `confirm` deve essere il nome del gruppo. */
+  deleteGroup(groupId: string, confirm: string): Promise<void>
   setMemberRole(groupId: string, userId: string, role: Role): Promise<void>
   removeMember(groupId: string, userId: string): Promise<void>
   regenerateInvite(groupId: string): Promise<string>

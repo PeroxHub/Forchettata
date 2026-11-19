@@ -1140,6 +1140,41 @@ begin
 end
 $$;
 
+create or replace function public.rename_group(p_group uuid, p_name text)
+returns void language plpgsql volatile security definer set search_path = '' as $$
+declare
+  nm text := btrim(coalesce(p_name, ''));
+  old text;
+begin
+  perform private.require_admin(p_group);
+  if char_length(nm) not between 1 and 60 then
+    raise exception 'Il nome del gruppo deve avere da 1 a 60 caratteri';
+  end if;
+  select name into old from public.groups where id = p_group for update;
+  if old = nm then
+    return;
+  end if;
+  update public.groups set name = nm where id = p_group;
+  perform private.log(p_group, 'group_renamed', jsonb_build_object('from', old, 'to', nm));
+end
+$$;
+
+-- Elimina il gruppo con tutti i suoi dati (giri, proposte, voti, disponibilità, registro).
+-- Per sicurezza bisogna riscrivere il nome del gruppo.
+create or replace function public.delete_group(p_group uuid, p_confirm text)
+returns void language plpgsql volatile security definer set search_path = '' as $$
+declare
+  nm text;
+begin
+  perform private.require_admin(p_group);
+  select name into nm from public.groups where id = p_group for update;
+  if lower(btrim(coalesce(p_confirm, ''))) <> lower(btrim(nm)) then
+    raise exception 'Per confermare scrivi esattamente il nome del gruppo: %', nm;
+  end if;
+  delete from public.groups where id = p_group;
+end
+$$;
+
 create or replace function public.update_profile(p_group uuid, p_name text)
 returns void language plpgsql volatile security definer set search_path = '' as $$
 declare
@@ -1284,7 +1319,8 @@ revoke all on function
   public.undo_draw(uuid, boolean), public.set_dinner_date(uuid, date),
   public.open_voting_now(uuid), public.cast_vote(uuid, jsonb), public.close_round(uuid),
   public.tick(uuid), public.update_settings(uuid, text, jsonb),
-  public.update_profile(uuid, text), public.set_member_role(uuid, uuid, text),
+  public.update_profile(uuid, text), public.rename_group(uuid, text), public.delete_group(uuid, text),
+  public.set_member_role(uuid, uuid, text),
   public.remove_member(uuid, uuid), public.regenerate_invite(uuid)
   from public, anon;
 grant execute on function
@@ -1294,7 +1330,8 @@ grant execute on function
   public.undo_draw(uuid, boolean), public.set_dinner_date(uuid, date),
   public.open_voting_now(uuid), public.cast_vote(uuid, jsonb), public.close_round(uuid),
   public.tick(uuid), public.update_settings(uuid, text, jsonb),
-  public.update_profile(uuid, text), public.set_member_role(uuid, uuid, text),
+  public.update_profile(uuid, text), public.rename_group(uuid, text), public.delete_group(uuid, text),
+  public.set_member_role(uuid, uuid, text),
   public.remove_member(uuid, uuid), public.regenerate_invite(uuid)
   to authenticated;
 

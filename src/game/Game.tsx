@@ -47,6 +47,8 @@ export function Game({
   groups,
   onSwitchGroup,
   onGroupAdded,
+  onGroupDeleted,
+  onGroupsStale,
   onSignOut,
   onLostAccess,
   email,
@@ -58,6 +60,10 @@ export function Game({
   onSwitchGroup?: (id: string) => void
   /** Dopo aver creato un gruppo o essere entrati in uno nuovo. */
   onGroupAdded?: (id: string) => void
+  /** Dopo aver eliminato il gruppo aperto. */
+  onGroupDeleted?: () => void
+  /** Il nome o il ruolo del gruppo aperto è cambiato: va riletto l'elenco dei gruppi. */
+  onGroupsStale?: () => void
   onSignOut?: () => void
   onLostAccess?: () => void
   email?: string | null
@@ -75,6 +81,45 @@ export function Game({
     void refresh()
   }, [tab, refresh])
 
+  // nome e ruolo del gruppo aperto vengono dallo stato appena letto, così il menu dei gruppi non resta indietro
+  const name = state?.group.name
+  const role = state?.me.role
+  const groupList = groups?.map((g) => (g.id === groupId && name && role ? { ...g, name, role } : g))
+  const stale = groups?.find((g) => g.id === groupId)
+  const asked = useRef('')
+  useEffect(() => {
+    const key = `${name}|${role}`
+    if (name && stale && (stale.name !== name || stale.role !== role) && asked.current !== key) {
+      asked.current = key // una sola richiesta per ogni cambio, anche se l'elenco tarda ad aggiornarsi
+      onGroupsStale?.()
+    }
+  }, [name, role, stale, onGroupsStale])
+  useEffect(() => {
+    document.title = name ? `${name} · Cena alla cieca` : 'Cena alla cieca'
+  }, [name])
+
+  // gruppo eliminato o membro tolto: non ha senso restare sulla pagina
+  if (error && /Non fai parte/.test(error) && onLostAccess) {
+    return (
+      <div className="center-page">
+        <div className="card auth-card stack">
+          <h2>Questo gruppo non è più disponibile</h2>
+          <p className="muted">È stato eliminato da un organizzatore, oppure non ne fai più parte.</p>
+          <div className="row">
+            <button className="btn primary" onClick={onLostAccess}>
+              Vai ai tuoi gruppi
+            </button>
+            {onSignOut && (
+              <button className="btn ghost" onClick={onSignOut}>
+                Esci
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (!state) {
     if (!error) return <Spinner />
     return (
@@ -86,11 +131,6 @@ export function Game({
             <button className="btn primary" onClick={() => void refresh()}>
               <RefreshCw size={16} /> Riprova
             </button>
-            {/Non fai parte/.test(error) && onLostAccess && (
-              <button className="btn" onClick={onLostAccess}>
-                Usa un altro codice d’invito
-              </button>
-            )}
             {onSignOut && (
               <button className="btn ghost" onClick={onSignOut}>
                 Esci
@@ -107,7 +147,16 @@ export function Game({
     storico: <HistoryPage />,
     classifica: <LeaderboardPage />,
     regole: <RulesPage />,
-    gruppo: <GroupPage onSignOut={onSignOut} email={email} groups={groups} onSwitchGroup={onSwitchGroup} onGroupAdded={onGroupAdded} />,
+    gruppo: (
+      <GroupPage
+        onSignOut={onSignOut}
+        email={email}
+        groups={groupList}
+        onSwitchGroup={onSwitchGroup}
+        onGroupAdded={onGroupAdded}
+        onGroupDeleted={onGroupDeleted}
+      />
+    ),
   }[tab]
 
   return (
@@ -118,7 +167,7 @@ export function Game({
           <div className="topbar-inner">
             <div className="brand">
               <BrandMark />
-              {groups && groups.length > 1 && onSwitchGroup ? (
+              {groupList && groupList.length > 1 && onSwitchGroup ? (
                 <select
                   className="input"
                   style={{ minHeight: 34, padding: '4px 8px', width: 'auto' }}
@@ -126,7 +175,7 @@ export function Game({
                   onChange={(e) => onSwitchGroup(e.target.value)}
                   aria-label="Gruppo"
                 >
-                  {groups.map((g) => (
+                  {groupList.map((g) => (
                     <option key={g.id} value={g.id}>
                       {g.name}
                     </option>

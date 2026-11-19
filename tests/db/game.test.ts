@@ -452,6 +452,38 @@ describe.skipIf(!DATABASE_URL)('database: regole del gioco', () => {
     await expect(db.rpc(zoe, 'create_group', { p_name: 'Troppi' })).rejects.toThrow(/massimo/)
   })
 
+  it('rinominare il gruppo: solo l’organizzatore, e resta nel registro', async () => {
+    const g = await db.groupWith(['Anna', 'Bruno'])
+    await expect(db.rpc(g.users.Bruno, 'rename_group', { p_group: g.gid, p_name: 'Hack' })).rejects.toThrow(/organizzatore/)
+    await expect(db.rpc(g.users.Anna, 'rename_group', { p_group: g.gid, p_name: '   ' })).rejects.toThrow(/da 1 a 60/)
+    await db.rpc(g.users.Anna, 'rename_group', { p_group: g.gid, p_name: '  Le Forchette ' })
+    const s = await db.state(g.users.Bruno, g.gid)
+    expect(s.group.name).toBe('Le Forchette')
+    expect((await db.rpc(g.users.Bruno, 'my_groups'))[0].name).toBe('Le Forchette')
+    expect(s.activity[0]).toMatchObject({ kind: 'group_renamed', user_id: g.users.Anna, details: { from: 'Test', to: 'Le Forchette' } })
+    // stesso nome: nessuna voce in più nel registro
+    await db.rpc(g.users.Anna, 'rename_group', { p_group: g.gid, p_name: 'Le Forchette' })
+    expect((await db.state(g.users.Anna, g.gid)).activity.filter((a: any) => a.kind === 'group_renamed')).toHaveLength(1)
+  })
+
+  it('eliminare il gruppo: solo l’organizzatore, con il nome come conferma, e sparisce tutto', async () => {
+    const g = await db.groupWith(['Anna', 'Bruno', 'Carla'])
+    const rid = await toVoting(g, 'Carla')
+    await db.rpc(g.users.Bruno, 'cast_vote', { p_round: rid, p_scores: sc(8, 8, 8, 8) })
+    await db.rpc(g.users.Bruno, 'save_availability', { p_round: rid, p_days: [await db.today()] })
+    await expect(db.rpc(g.users.Bruno, 'delete_group', { p_group: g.gid, p_confirm: 'Test' })).rejects.toThrow(/organizzatore/)
+    await expect(db.rpc(g.users.Anna, 'delete_group', { p_group: g.gid, p_confirm: 'Altro' })).rejects.toThrow(/scrivi esattamente il nome/)
+    await db.rpc(g.users.Anna, 'delete_group', { p_group: g.gid, p_confirm: ' test ' })
+    for (const t of ['groups', 'group_invites', 'members', 'rounds', 'proposals', 'votes', 'availability', 'activity_log']) {
+      const col = t === 'groups' ? 'id' : 'group_id'
+      const [{ n }] = await db.sql(`select count(*)::int as n from public.${t} where ${col} = $1`, [g.gid])
+      expect(n, t).toBe(0)
+    }
+    await expect(db.state(g.users.Bruno, g.gid)).rejects.toThrow(/Non fai parte/)
+    expect(await db.rpc(g.users.Bruno, 'my_groups')).toEqual([])
+    await expect(db.rpc(g.users.Bruno, 'join_group', { p_code: g.code })).rejects.toThrow(/non valido/)
+  })
+
   it('le funzioni interne non sono chiamabili dagli utenti', async () => {
     const g = await db.groupWith(['Anna'])
     const r = await db.currentRound(g.gid)

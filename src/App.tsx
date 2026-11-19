@@ -168,6 +168,16 @@ function LiveApp({ url, keyValue }: { url: string; keyValue: string }) {
     })
   }, [userId, loadGroups, toast])
 
+  /** Il gruppo aperto non c'è più: passo a un altro gruppo, o alla pagina di ingresso. */
+  const leaveGroup = () => {
+    store.del('cac_group')
+    setGroups(null)
+    loadGroups().catch((e) => {
+      toast(errorMessage(e), 'error')
+      setGroups([])
+    })
+  }
+
   const signOut = async () => {
     await backend.signOut()
     setUser(null)
@@ -193,11 +203,15 @@ function LiveApp({ url, keyValue }: { url: string; keyValue: string }) {
         setGroupId(id)
       }}
       onGroupAdded={(id) => void loadGroups(id)}
+      onGroupsStale={() =>
+        void backend
+          .myGroups()
+          .then(setGroups)
+          .catch(() => {})
+      }
+      onGroupDeleted={leaveGroup}
       onSignOut={signOut}
-      onLostAccess={() => {
-        store.del('cac_group')
-        setGroupId(null)
-      }}
+      onLostAccess={leaveGroup}
     />
   )
 }

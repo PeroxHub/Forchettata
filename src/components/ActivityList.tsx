@@ -74,6 +74,15 @@ function describe(a: Activity, name: (id: string | null | undefined) => string):
       }
     case 'rules_changed': {
       const changes = Object.entries((d.changes ?? {}) as Record<string, { from: unknown; to: unknown }>)
+      if (changes.length === 1 && changes[0][0] === 'name')
+        return {
+          icon: <Settings2 size={15} />,
+          text: (
+            <>
+              {who} ha rinominato il gruppo: “{String(changes[0][1].from)}” → “{String(changes[0][1].to)}”
+            </>
+          ),
+        }
       return {
         icon: <Settings2 size={15} />,
         text: (
@@ -97,6 +106,15 @@ function describe(a: Activity, name: (id: string | null | undefined) => string):
         ),
       }
     }
+    case 'group_renamed':
+      return {
+        icon: <Settings2 size={15} />,
+        text: (
+          <>
+            {who} ha rinominato il gruppo: “{d.from}” → “{d.to}”
+          </>
+        ),
+      }
     case 'role_changed':
       return {
         icon: <KeyRound size={15} />,
